@@ -20,6 +20,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "adc.h"
+#include "dma.h"
 #include "i2c.h"
 #include "spi.h"
 #include "gpio.h"
@@ -92,6 +93,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_SPI2_Init();
@@ -191,25 +193,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */
-}
-
-/**
-  * @brief  GPIO EXTI回调函数，处理nRF24L01+中断
-  * @param  GPIO_Pin: 触发中断的GPIO引脚
-  * @retval None
-  */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  /* USER CODE BEGIN HAL_GPIO_EXTI_Callback */
-  if (GPIO_Pin == GPIO_PIN_1) // PC1 - nRF24L01+ IRQ引脚
-  {
-    extern osEventFlagsId_t nrf24_event_flags;
-    if (nrf24_event_flags != NULL)
-    {
-      osEventFlagsSet(nrf24_event_flags, 0x01);
-    }
-  }
-  /* USER CODE END HAL_GPIO_EXTI_Callback */
 }
 
 /**
