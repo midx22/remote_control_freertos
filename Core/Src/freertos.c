@@ -58,11 +58,15 @@ osEventFlagsId_t adc_pingpong_event_flags;
 #define PONG_BUFFER_READY    (1 << 1)  // Pong缓冲区数据就绪
 #define DMA_ERROR_FLAG       (1 << 2)  // DMA错误标志
 
+// ADC全局变量声明
+volatile uint16_t ch0_avg, ch1_avg, ch2_avg, ch3_avg;
+
 // ADC Ping-Pong双缓冲区 (每个缓冲区8个样本 = 4通道 * 2次采样)
 #define PING_PONG_BUFFER_SIZE  8  // 4通道 * 2次采样
 volatile uint16_t adc_ping_buffer[PING_PONG_BUFFER_SIZE];  // Ping缓冲区
 volatile uint16_t adc_pong_buffer[PING_PONG_BUFFER_SIZE];  // Pong缓冲区
 volatile uint16_t adc_pingpong_buffer[PING_PONG_BUFFER_SIZE * 2]; // 完整DMA缓冲区
+
 
 // Ping-Pong状态管理
 volatile uint8_t current_processing_buffer = 0; // 0=处理Ping, 1=处理Pong
@@ -218,7 +222,7 @@ void StartADC_Task(void *argument)
   
   char buffer[25];
   uint32_t flags;
-  uint16_t ch0_avg, ch1_avg, ch2_avg, ch3_avg;
+
   
   // 初始化Ping-Pong缓冲区
   for(int i = 0; i < PING_PONG_BUFFER_SIZE * 2; i++) {
@@ -287,81 +291,38 @@ void StartADC_Task(void *argument)
 void Startwireless_Task(void *argument)
 {
   /* USER CODE BEGIN Startwireless_Task */
-  uint8_t connection_status = 0;
-  uint8_t send_result = 0;
-  char display_buffer[20];
-  uint32_t send_counter = 0;
-  uint8_t status_reg = 0;
-  uint8_t message_index = 0;
+  char packet_a[20];
+  char packet_b[20];
   
-  // 不同长度的测试消息
-  char test_messages[][25] = {
-    "Hi!",                    // 3 字节
-    "Hello",                  // 5 字节  
-    "Test123",                // 7 字节
-
-  };
-  uint8_t num_messages = sizeof(test_messages) / sizeof(test_messages[0]);
-  
-  // nRF24L01+ 地址配置（5字节地址）
+  // nRF24L01+ 地址配置
   uint8_t address[5] = {0xE7, 0xE7, 0xE7, 0xE7, 0xE7};
   
-  // 初始化nRF24L01+ GPIO
+  // 初始化nRF24L01+
   NRF24_GPIO_Init();
-  
-  // 短暂延时让硬件稳定
   osDelay(100);
   
-  // 测试连接
-  connection_status = NRF24_TestConnection();
-  if (connection_status) {
-    // 初始化nRF24L01+
+  if (NRF24_TestConnection()) {
     NRF24_Init();
-    
-    // 完全清除所有状态标志
     NRF24_WriteRegister(NRF24_REG_STATUS, 0x70);
     NRF24_FlushTx();
     NRF24_FlushRx();
-    
     osDelay(10);
-    
-    // 设置为动态长度发送模式
     NRF24_SetTxModeDynamic(address);
-    
-    // 再次清除状态
     NRF24_WriteRegister(NRF24_REG_STATUS, 0x70);
-
-
-    
   }
   
   /* Infinite loop */
   for(;;)
   {
-    if (connection_status) {
-      
-      // 获取当前要发送的消息
-      char* current_msg = test_messages[message_index];
-      uint8_t msg_length = strlen(current_msg);
-      
-      // 发送数据
-      send_result = NRF24_TransmitDynamic((uint8_t*)current_msg, msg_length);
-      
-      if (send_result) {
-
+    // 发送A包：CH0和CH1数据
+    sprintf(packet_a, "A:%04d,%04d", ch0_avg, ch1_avg);
+    NRF24_TransmitDynamic((uint8_t*)packet_a, strlen(packet_a));
+    osDelay(400);
     
-      }
-      
-      // 切换到下一条消息
-      message_index = (message_index + 1) % num_messages;
-      
-      // 每2秒发送一次
-      osDelay(2000);
-      
-    } else {
-      // 连接失败，延时后重试
-      osDelay(1000);
-    }
+    // 发送B包：CH2和CH3数据
+    sprintf(packet_b, "B:%04d,%04d", ch2_avg, ch3_avg);
+    NRF24_TransmitDynamic((uint8_t*)packet_b, strlen(packet_b));
+    osDelay(400);  // 总周期1.5秒
   }
   /* USER CODE END Startwireless_Task */
 }
